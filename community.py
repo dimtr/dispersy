@@ -21,13 +21,14 @@ except ImportError:
     from .python27_ordereddict import OrderedDict
 
 from .bloomfilter import BloomFilter
-from .candidate import WalkCandidate, BootstrapCandidate
+from .candidate import WalkCandidate, BootstrapCandidate, FIVE_FACTOR
 from .conversion import BinaryConversion, DefaultConversion
 from .decorator import documentation, runtime_duration_warning
 from .dispersy import Dispersy
 from .distribution import SyncDistribution, GlobalTimePruning
 from .logger import get_logger
 from .member import DummyMember, Member
+from .requestcache import RequestCache
 from .resolution import PublicResolution, LinearResolution, DynamicResolution
 from .statistics import CommunityStatistics
 from .timeline import Timeline
@@ -327,6 +328,9 @@ class Community(object):
             b = BloomFilter(self.dispersy_sync_bloom_filter_bits, self.dispersy_sync_bloom_filter_error_rate)
             logger.debug("sync bloom:    size: %d;  capacity: %d;  error-rate: %f", int(ceil(b.size // 8)), b.get_capacity(self.dispersy_sync_bloom_filter_error_rate), self.dispersy_sync_bloom_filter_error_rate)
 
+        # assigns temporary cache objects to unique identifiers
+        self._request_cache = RequestCache(self._dispersy.callback)
+
         # initial timeline.  the timeline will keep track of member permissions
         self._timeline = Timeline(self)
         self._initialize_timeline()
@@ -353,6 +357,14 @@ class Community(object):
         Dictionary containing sock_addr:Candidate pairs.
         """
         return self._candidates
+
+    @property
+    def request_cache(self):
+        """
+        The request cache instance responsible for maintaining identifiers and timeouts for outstanding requests.
+        @rtype: RequestCache
+        """
+        return self._request_cache
 
     @property
     def statistics(self):
@@ -408,7 +420,7 @@ class Community(object):
             self._meta_messages[meta_message.name] = meta_message
 
         if __debug__:
-            sync_interval = 5.0
+            sync_interval = 5.0 * FIVE_FACTOR
             for meta_message in self._meta_messages.itervalues():
                 if isinstance(meta_message.distribution, SyncDistribution) and meta_message.batch.max_window >= sync_interval:
                     logger.warning("when sync is enabled the interval should be greater than the walking frequency.  otherwise you are likely to receive duplicate packets [%s]", meta_message.name)
@@ -978,82 +990,6 @@ class Community(object):
 
         return bloomfilter_range, data
 
-    # def dispersy_claim_sync_bloom_filter(self, identifier):
-    #     """
-    #     Returns a (time_low, time_high, bloom_filter) tuple or None.
-    #     """
-    #     count, = self._dispersy.database.execute(u"SELECT COUNT(1) FROM sync JOIN meta_message ON meta_message.id = sync.meta_message WHERE sync.community = ? AND meta_message.priority > 32", (self._database_id,)).next()
-    #     if count:
-    #         bloom = BloomFilter(self.dispersy_sync_bloom_filter_bits, self.dispersy_sync_bloom_filter_error_rate, prefix=chr(int(random() * 256)))
-    #         capacity = bloom.get_capacity(self.dispersy_sync_bloom_filter_error_rate)
-    #         ranges = int(ceil(1.0 * count / capacity))
-
-    #         desired_mean = ranges / 2.0
-    #         lambd = 1.0 / desired_mean
-    #         range_ = ranges - int(ceil(expovariate(lambd)))
-    # RANGE_ < 0 is possible when the exponential function returns a very large number (least likely)
-    # RANGE_ = 0 is the oldest time bloomfilter_range (less likely)
-    # RANGE_ = RANGES - 1 is the highest time bloomfilter_range (more likely)
-
-    #         if range_ < 0:
-    # pick uniform randomly
-    #             range_ = int(random() * ranges)
-
-    #         if range_ == ranges - 1:
-    # the chosen bloomfilter_range is to small to fill an entire bloom filter.  adjust the offset
-    # accordingly
-    #             offset = max(0, count - capacity + 1)
-
-    #         else:
-    #             offset = range_ * capacity
-
-    # get the time bloomfilter_range associated to the offset
-    #         try:
-    #             time_low, time_high = self._dispersy.database.execute(u"SELECT MIN(sync.global_time), MAX(sync.global_time) FROM sync JOIN meta_message ON meta_message.id = sync.meta_message WHERE sync.community = ? AND meta_message.priority > 32 ORDER BY sync.global_time LIMIT ? OFFSET ?",
-    #                                                                   (self._database_id, capacity, offset)).next()
-    #         except:
-    #             dprint("count: ", count, " capacity: ", capacity, " bloomfilter_range: ", range_, " ranges: ", ranges, " offset: ", offset, force=True)
-    #             assert False
-
-    #         if __debug__ and self.get_classification() == u"ChannelCommunity":
-    #             low, high = self._dispersy.database.execute(u"SELECT MIN(sync.global_time), MAX(sync.global_time) FROM sync JOIN meta_message ON meta_message.id = sync.meta_message WHERE sync.community = ? AND meta_message.priority > 32",
-    #                                                         (self._database_id,)).next()
-    #             dprint("bloomfilter_range: ", range_, " ranges: ", ranges, " offset: ", offset, " time: [", time_low, ":", time_high, "] in-db: [", low, ":", high, "]", force=True)
-
-    #         assert isinstance(time_low, (int, long))
-    #         assert isinstance(time_high, (int, long))
-
-    #         assert 0 < ranges
-    #         assert 0 <= range_ < ranges
-    #         assert ranges == 1 and range_ == 0 or ranges > 1
-    #         assert 0 <= offset
-
-    # get all the data associated to the time bloomfilter_range
-    #         counter = 0
-    #         for packet, in self._dispersy.database.execute(u"SELECT sync.packet FROM sync JOIN meta_message ON meta_message.id = sync.meta_message WHERE sync.community = ? AND meta_message.priority > 32 AND sync.global_time BETWEEN ? AND ?",
-    #                                                        (self._database_id, time_low, time_high)):
-    #             bloom.add(str(packet))
-    #             counter += 1
-
-    #         if range_ == 0:
-    #             time_low = 1
-
-    #         if range_ == ranges - 1:
-    #             time_high = 0
-
-    #         if __debug__ and self.get_classification() == u"ChannelCommunity":
-    #             dprint("off: ", offset, " cap: ", capacity, " count: ", counter, "/", count, " time: [", time_low, ":", time_high, "]", force=True)
-
-    # if __debug__:
-    # if len(data) > 1:
-    # low, high = self._dispersy.database.execute(u"SELECT MIN(sync.global_time), MAX(sync.global_time) FROM sync JOIN meta_message ON meta_message.id = sync.meta_message WHERE sync.community = ? AND meta_message.priority > 32",
-    # (self._database_id,)).next()
-    # dprint(self.cid.encode("HEX"), " syncing <<", data[0][0], " <", data[1][0], "-", data[-2][0], "> ", data[-1][0], ">> sync:[", time_low, ":", time_high, "] db:[", low, ":", high, "] len:", len(data), " cap:", capacity)
-
-    #         return (time_low, time_high, bloom)
-
-    #     return (1, 0, BloomFilter(8, 0.1, prefix='\x00'))
-
     @property
     def dispersy_sync_response_limit(self):
         """
@@ -1173,7 +1109,7 @@ class Community(object):
             # get opinions from all active candidates
             if self._acceptable_global_time_deadline < now:
                 self._acceptable_global_time_cache = acceptable_global_time_helper()
-                self._acceptable_global_time_deadline = now + 5.0
+                self._acceptable_global_time_deadline = now + (5.0 * FIVE_FACTOR)
             return self._acceptable_global_time_cache
 
         else:
@@ -1217,7 +1153,7 @@ class Community(object):
         for meta in self._meta_messages.itervalues():
             if isinstance(meta.distribution, SyncDistribution) and isinstance(meta.distribution.pruning, GlobalTimePruning):
                 # TODO: some messages should support a notifier when a message is pruned
-                # if __debug__: dprint("checking pruning for ", meta.name, " @", self._global_time, force=1)
+                # logger.debug("checking pruning for %s @%d", meta.name, self._global_time)
                 # packets = [str(packet)
                 #            for packet,
                 #            in self._dispersy.database.execute(u"SELECT packet FROM sync WHERE meta_message = ? AND global_time <= ?",
@@ -1292,22 +1228,24 @@ class Community(object):
         if self._conversions:
             return self._conversions[-1]
 
-        # for backwards compatibility we will raise a KeyError when conversion isn't found (previously self._conversions
-        # was a dictionary)
-        logger.warning("Unable to find default conversion (there are no conversions available)")
+        # for backwards compatibility we will raise a KeyError when conversion isn't found
+        # (previously self._conversions was a dictionary)
+        logger.warning("unable to find default conversion (there are no conversions available)")
         raise KeyError()
 
     def get_conversion_for_packet(self, packet):
         """
         Returns the conversion associated with PACKET.
 
-        This method returns the first available conversion that can *decode* PACKET, this is tested in reversed order
-        using conversion.can_decode_message(PACKET).  Typically a conversion can decode a string when it matches: the
-        community version, the Dispersy version, and the community identifier, and the conversion knows how to decode
-        messages types described in PACKET.
+        This method returns the first available conversion that can *decode* PACKET, this is tested
+        in reversed order using conversion.can_decode_message(PACKET).  Typically a conversion can
+        decode a string when it matches: the community version, the Dispersy version, and the
+        community identifier, and the conversion knows how to decode messages types described in
+        PACKET.
 
-        Note that only the bytes needed to determine conversion.can_decode_message(PACKET) must be given, therefore
-        PACKET is not necessarily an entire packet but can also be a the first N bytes of a packet.
+        Note that only the bytes needed to determine conversion.can_decode_message(PACKET) must be
+        given, therefore PACKET is not necessarily an entire packet but can also be a the first N
+        bytes of a packet.
 
         Raises KeyError(packet) when no conversion is available.
         """
@@ -1316,18 +1254,18 @@ class Community(object):
             if conversion.can_decode_message(packet):
                 return conversion
 
-        # for backwards compatibility we will raise a KeyError when no conversion for PACKET is found (previously
-        # self._conversions was a dictionary)
-        logger.warning("Unable to find conversion to decode %s in %s", packet.encode("HEX"), self._conversions)
+        # for backwards compatibility we will raise a KeyError when no conversion for PACKET is
+        # found (previously self._conversions was a dictionary)
+        logger.warning("unable to find conversion to decode %s in %s", packet.encode("HEX"), self._conversions)
         raise KeyError(packet)
 
     def get_conversion_for_message(self, message):
         """
         Returns the conversion associated with MESSAGE.
 
-        This method returns the first available conversion that can *encode* MESSAGE, this is tested in reversed order
-        using conversion.can_encode_message(MESSAGE).  Typically a conversion can encode a message when: the conversion
-        knows how to encode messages with MESSAGE.name.
+        This method returns the first available conversion that can *encode* MESSAGE, this is tested
+        in reversed order using conversion.can_encode_message(MESSAGE).  Typically a conversion can
+        encode a message when: the conversion knows how to encode messages with MESSAGE.name.
 
         Raises KeyError(message) when no conversion is available.
         """
@@ -1339,9 +1277,9 @@ class Community(object):
             if conversion.can_encode_message(message):
                 return conversion
 
-        # for backwards compatibility we will raise a KeyError when no conversion for MESSAGE is found (previously
-        # self._conversions was a dictionary)
-        logger.warning("Unable to find conversion to encode %s in %s", message, self._conversions)
+        # for backwards compatibility we will raise a KeyError when no conversion for MESSAGE is
+        # found (previously self._conversions was a dictionary)
+        logger.warning("unable to find conversion to encode %s in %s", message, self._conversions)
         raise KeyError(message)
 
     def add_conversion(self, conversion):
@@ -1402,7 +1340,9 @@ class Community(object):
     def dispersy_on_dynamic_settings(self, messages, initializing=False):
         return self._dispersy.on_dynamic_settings(self, messages, initializing)
 
-    def _iter_category(self, category):
+    def _iter_category(self, category, strict=True):
+        # strict=True will ensure both candidate.lan_address and candidate.wan_address are not
+        # 0.0.0.0:0
         while True:
             index = 0
             has_result = False
@@ -1414,7 +1354,8 @@ class Community(object):
                 candidate = self._candidates.get(key)
 
                 if (candidate and
-                    candidate.get_category(now) == category):
+                    candidate.get_category(now) == category and
+                    not (strict and (candidate.lan_address == ("0.0.0.0", 0) or candidate.wan_address == ("0.0.0.0", 0)))):
 
                     yield candidate
                     has_result = True
@@ -1692,9 +1633,6 @@ class Community(object):
         else:
             # modify either the senders LAN or WAN address based on how we perceive that node
             source_lan_address, source_wan_address = self._dispersy.estimate_lan_and_wan_addresses(message.candidate.sock_addr, message.payload.source_lan_address, message.payload.source_wan_address)
-            if source_lan_address == ("0.0.0.0", 0) or source_wan_address == ("0.0.0.0", 0):
-                logger.debug("problems determining source LAN or WAN address, can neither introduce nor convert candidate to WalkCandidate")
-                return None
 
             # check if we have this candidate registered at its sock_addr
             candidate = self.get_candidate(message.candidate.sock_addr, lan_address=source_lan_address)
@@ -1743,11 +1681,28 @@ class Community(object):
         for other in others:
             # all except for the CANDIDATE
             if not other == candidate:
-                logger.warn("removing %s in favor of %s", other, candidate)
+                logger.warning("removing %s %s in favor of %s %s",
+                               other.sock_addr, other,
+                               candidate.sock_addr, candidate)
                 candidate.merge(other)
                 del self._candidates[other.sock_addr]
                 self.add_candidate(candidate)
                 self._dispersy.wan_address_unvote(other)
+
+    def handle_missing_messages(self, messages, *classes):
+        if __debug__:
+            from .message import Message
+            from .dispersy import MissingSomethingCache
+            assert all(isinstance(message, Message.Implementation) for message in messages), [type(message) for message in messages]
+            assert all(issubclass(cls, MissingSomethingCache) for cls in classes), [type(cls) for cls in classes]
+
+        for message in messages:
+            for cls in classes:
+                cache = self._request_cache.pop(cls.create_identifier_from_message(message))
+                if cache:
+                    logger.debug("found request cache for %s", message)
+                    for response_func, response_args in cache.callbacks:
+                        response_func(message, *response_args)
 
     def _periodically_cleanup_candidates(self):
         """

@@ -9,22 +9,24 @@ if __debug__:
         assert len(address) == 2, len(address)
         assert isinstance(address[0], str), type(address[0])
         assert address[0], address[0]
-        assert not address[0] == "0.0.0.0", address
         assert isinstance(address[1], int), type(address[1])
         assert address[1] >= 0, address[1]
         return True
 
 
+# factor applied to all 5.0 second based values
+FIVE_FACTOR = 1.0
+
 # delay and lifetime values are chosen to ensure that a candidate will not exceed 60.0 or 30.0
 # seconds.  However, taking into account round trip time and processing delay we to use smaller
 # values without conflicting with the next 5.0 walk cycle.  Hence, we pick 2.5 seconds below the
 # actual cutoff point.
-CANDIDATE_ELIGIBLE_DELAY = 27.5
-CANDIDATE_ELIGIBLE_BOOTSTRAP_DELAY = 57.5
-CANDIDATE_WALK_LIFETIME = 57.5
-CANDIDATE_STUMBLE_LIFETIME = 57.5
-CANDIDATE_INTRO_LIFETIME = 27.5
-CANDIDATE_LIFETIME = 180.0
+CANDIDATE_ELIGIBLE_DELAY = 27.5 * FIVE_FACTOR
+CANDIDATE_ELIGIBLE_BOOTSTRAP_DELAY = 57.5 * FIVE_FACTOR
+CANDIDATE_WALK_LIFETIME = 57.5 * FIVE_FACTOR
+CANDIDATE_STUMBLE_LIFETIME = 57.5 * FIVE_FACTOR
+CANDIDATE_INTRO_LIFETIME = 27.5 * FIVE_FACTOR
+CANDIDATE_LIFETIME = 180.0 * FIVE_FACTOR
 assert isinstance(CANDIDATE_ELIGIBLE_DELAY, float)
 assert isinstance(CANDIDATE_ELIGIBLE_BOOTSTRAP_DELAY, float)
 assert isinstance(CANDIDATE_WALK_LIFETIME, float)
@@ -54,7 +56,7 @@ class Candidate(object):
         return self._tunnel
 
     def get_destination_address(self, wan_address):
-        assert is_address(wan_address), wan_address
+        logger.debug("deprecated.  use candidate.sock_addr instead")
         return self._sock_addr
 
     def __str__(self):
@@ -121,10 +123,6 @@ class WalkCandidate(Candidate):
     def connection_type(self):
         return self._connection_type
 
-    def get_destination_address(self, wan_address):
-        assert is_address(wan_address), wan_address
-        return self._lan_address if wan_address[0] == self._wan_address[0] else self._wan_address
-
     def merge(self, other):
         assert isinstance(other, WalkCandidate), type(other)
         self._associations.update(other._associations)
@@ -176,11 +174,28 @@ class WalkCandidate(Candidate):
         """
         return max(self._last_walk, self._last_stumble, self._last_intro) + CANDIDATE_LIFETIME < now
 
-    def age(self, now):
+    def age(self, now, category=u""):
         """
-        Returns the time between NOW and the most recent walk or stumble.
+        Returns the time between NOW and the most recent walk, stumble, or intro (depending on
+        CATEGORY).
+
+        When CATEGORY is an empty string candidate.get_category(NOW) will be used to obtain it.
+
+        For the following CATEGORY values it will return the equivalent:
+        - walk :: NOW - candidate.last_walk
+        - stumble :: NOW - candidate.last_stumble
+        - intro :: NOW - candidate.last_intro
+        - none :: NOW - max(candidate.last_walk, candidate.last_stumble, candidate.last_intro)
         """
-        return now - max(self._last_walk, self._last_stumble)
+        if not category:
+            category = self.get_category(now)
+
+        mapping = {u"walk": now - self._last_walk,
+                   u"stumble": now - self._last_stumble,
+                   u"intro": now - self._last_intro,
+                   u"none": now - max(self._last_walk, self._last_stumble, self._last_intro)}
+
+        return mapping[category]
 
     def inactive(self, now):
         """
@@ -228,6 +243,8 @@ class WalkCandidate(Candidate):
         Returns the category (u"walk", u"stumble", u"intro", or u"none") depending on the current
         time NOW.
         """
+        assert isinstance(now, float), type(now)
+
         if self._last_walk + self._timeout_adjustment <= now < self._last_walk + CANDIDATE_WALK_LIFETIME:
             return u"walk"
 
@@ -243,6 +260,8 @@ class WalkCandidate(Candidate):
         """
         Called when we are about to send an introduction-request to this candidate.
         """
+        assert isinstance(now, float), type(now)
+        assert isinstance(timeout_adjustment, float), type(timeout_adjustment)
         self._last_walk = now
         self._timeout_adjustment = timeout_adjustment
 
@@ -256,12 +275,14 @@ class WalkCandidate(Candidate):
         """
         Called when we receive an introduction-request from this candidate.
         """
+        assert isinstance(now, float), type(now)
         self._last_stumble = now
 
     def intro(self, now):
         """
         Called when we receive an introduction-response introducing this candidate.
         """
+        assert isinstance(now, float), type(now)
         self._last_intro = now
 
     def update(self, tunnel, lan_address, wan_address, connection_type):
