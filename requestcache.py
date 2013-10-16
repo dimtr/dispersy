@@ -1,5 +1,6 @@
 from random import random
 
+from .candidate import FIVE_FACTOR
 from .logger import get_logger
 logger = get_logger(__name__)
 
@@ -21,11 +22,11 @@ class Cache(object):
 
     @property
     def timeout_delay(self):
-        return 10.0
+        return 10.0 * FIVE_FACTOR
 
     @property
     def cleanup_delay(self):
-        return 10.0
+        return 10.0 * FIVE_FACTOR
 
     def on_timeout(self):
         raise NotImplementedError()

@@ -59,7 +59,7 @@ from time import time
 from .authentication import NoAuthentication, MemberAuthentication, DoubleMemberAuthentication
 from .bloomfilter import BloomFilter
 from .bootstrap import get_bootstrap_candidates
-from .candidate import BootstrapCandidate, LoopbackCandidate, WalkCandidate, Candidate
+from .candidate import BootstrapCandidate, LoopbackCandidate, WalkCandidate, Candidate, FIVE_FACTOR
 from .crypto import ec_generate_key, ec_to_public_bin, ec_to_private_bin
 from .destination import CommunityDestination, CandidateDestination
 from .dispersydatabase import DispersyDatabase
@@ -127,13 +127,13 @@ class IntroductionRequestCache(NumberCache):
     @property
     def timeout_delay(self):
         # we will accept the response at most 10.5 seconds after our request
-        return 10.5
+        return 10.5 * FIVE_FACTOR
 
     @property
     def cleanup_delay(self):
         # the cache remains available at most 4.5 after receiving the response.  this gives some time to receive the
         # puncture message
-        return 4.5
+        return 4.5 * FIVE_FACTOR
 
     def __init__(self, community, helper_candidate):
         super(IntroductionRequestCache, self).__init__(community.request_cache)
@@ -3150,7 +3150,7 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
                 for func, args in cache.callbacks:
                     func(message, *args)
 
-    def create_missing_identity(self, community, candidate, dummy_member, response_func=None, response_args=(), timeout=4.5, forward=True):
+    def create_missing_identity(self, community, candidate, dummy_member, response_func=None, response_args=(), timeout=4.5 * FIVE_FACTOR, forward=True):
         """
         Create a dispersy-missing-identity message.
 
@@ -4616,7 +4616,7 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
 
         # delay will never be less than 0.1, hence we can accommodate 50 communities before the
         # interval between each step becomes larger than 5.0 seconds
-        optimaldelay = max(0.1, 5.0 / len(walker_communities))
+        optimaldelay = max(0.1, (5.0 * FIVE_FACTOR) / len(walker_communities))
         logger.debug("there are %d walker enabled communities.  pausing %ss (on average) between each step", len(walker_communities), optimaldelay)
 
         if __debug__:
@@ -4635,7 +4635,7 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
             walker_communities.append(community)
 
             actualtime = time()
-            allow_sync = community.dispersy_enable_bloom_filter_sync and actualtime - community.__most_recent_sync > 4.5
+            allow_sync = community.dispersy_enable_bloom_filter_sync and actualtime - community.__most_recent_sync > (4.5 * FIVE_FACTOR)
             logger.debug("previous sync was %.1f seconds ago %s", actualtime - community.__most_recent_sync, "" if allow_sync else "(no sync this cycle)")
             if allow_sync:
                 community.__most_recent_sync = actualtime
@@ -4661,7 +4661,7 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
             optimaltime = start + steps * optimaldelay
             actualtime = time()
 
-            if optimaltime + 5.0 < actualtime:
+            if optimaltime + (5.0 + FIVE_FACTOR) < actualtime:
                 # way out of sync!  reset start time
                 logger.warning("can not keep up!  resetting walker start time!")
                 start = actualtime

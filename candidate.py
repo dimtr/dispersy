@@ -14,16 +14,19 @@ if __debug__:
         return True
 
 
+# factor applied to all 5.0 second based values
+FIVE_FACTOR = 1.0
+
 # delay and lifetime values are chosen to ensure that a candidate will not exceed 60.0 or 30.0
 # seconds.  However, taking into account round trip time and processing delay we to use smaller
 # values without conflicting with the next 5.0 walk cycle.  Hence, we pick 2.5 seconds below the
 # actual cutoff point.
-CANDIDATE_ELIGIBLE_DELAY = 27.5
-CANDIDATE_ELIGIBLE_BOOTSTRAP_DELAY = 57.5
-CANDIDATE_WALK_LIFETIME = 57.5
-CANDIDATE_STUMBLE_LIFETIME = 57.5
-CANDIDATE_INTRO_LIFETIME = 27.5
-CANDIDATE_LIFETIME = 180.0
+CANDIDATE_ELIGIBLE_DELAY = 27.5 * FIVE_FACTOR
+CANDIDATE_ELIGIBLE_BOOTSTRAP_DELAY = 57.5 * FIVE_FACTOR
+CANDIDATE_WALK_LIFETIME = 57.5 * FIVE_FACTOR
+CANDIDATE_STUMBLE_LIFETIME = 57.5 * FIVE_FACTOR
+CANDIDATE_INTRO_LIFETIME = 27.5 * FIVE_FACTOR
+CANDIDATE_LIFETIME = 180.0 * FIVE_FACTOR
 assert isinstance(CANDIDATE_ELIGIBLE_DELAY, float)
 assert isinstance(CANDIDATE_ELIGIBLE_BOOTSTRAP_DELAY, float)
 assert isinstance(CANDIDATE_WALK_LIFETIME, float)

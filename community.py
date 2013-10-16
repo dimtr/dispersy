@@ -21,7 +21,7 @@ except ImportError:
     from .python27_ordereddict import OrderedDict
 
 from .bloomfilter import BloomFilter
-from .candidate import WalkCandidate, BootstrapCandidate
+from .candidate import WalkCandidate, BootstrapCandidate, FIVE_FACTOR
 from .conversion import BinaryConversion, DefaultConversion
 from .decorator import documentation, runtime_duration_warning
 from .dispersy import Dispersy
@@ -420,7 +420,7 @@ class Community(object):
             self._meta_messages[meta_message.name] = meta_message
 
         if __debug__:
-            sync_interval = 5.0
+            sync_interval = 5.0 * FIVE_FACTOR
             for meta_message in self._meta_messages.itervalues():
                 if isinstance(meta_message.distribution, SyncDistribution) and meta_message.batch.max_window >= sync_interval:
                     logger.warning("when sync is enabled the interval should be greater than the walking frequency.  otherwise you are likely to receive duplicate packets [%s]", meta_message.name)
@@ -1109,7 +1109,7 @@ class Community(object):
             # get opinions from all active candidates
             if self._acceptable_global_time_deadline < now:
                 self._acceptable_global_time_cache = acceptable_global_time_helper()
-                self._acceptable_global_time_deadline = now + 5.0
+                self._acceptable_global_time_deadline = now + (5.0 * FIVE_FACTOR)
             return self._acceptable_global_time_cache
 
         else:
