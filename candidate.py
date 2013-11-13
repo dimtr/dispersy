@@ -15,7 +15,7 @@ if __debug__:
 
 
 # factor applied to all 5.0 second based values
-FIVE_FACTOR = 1.0
+FIVE_FACTOR = 5.0
 
 # delay and lifetime values are chosen to ensure that a candidate will not exceed 60.0 or 30.0
 # seconds.  However, taking into account round trip time and processing delay we to use smaller

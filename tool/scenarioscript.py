@@ -50,6 +50,10 @@ class ScenarioScript(ScriptBase):
             self._dispersy.callback.register(self._periodically_log_statistics)
 
     @property
+    def peer_number(self):
+        return int(self._kargs["peernumber"])
+
+    @property
     def enable_wait_for_wan_address(self):
         return False
 
@@ -535,8 +539,7 @@ CREATE TABLE IF NOT EXISTS identities (
  public_key BLOB,
  private_key BLOB)"""
         self._sql_ready = u"""
-CREATE TABLE IF NOT EXISTS ready (peer_number INTEGER PRIMARY KEY)
-"""
+CREATE TABLE IF NOT EXISTS ready (peer_number INTEGER PRIMARY KEY) """
 
     def _share_connect(self, filename, delay):
         if filename in self._share_connection_cache:
@@ -712,6 +715,24 @@ CREATE TABLE IF NOT EXISTS ready (peer_number INTEGER PRIMARY KEY)
         con_memory.executescript("".join(line for line in con_local.iterdump()))
         self.log("scenario-share-synchronize", state="done")
 
+    def get_peer_from_public_key(self, public_key):
+        # dependencies
+        if not (0 < self._scenario_calls["scenario_start"]):
+            raise RuntimeError("get_peer_from_public_key must be called AFTER scenario_start")
+        if not (0 < self._scenario_calls["scenario_share_synchronize"]):
+            raise RuntimeError("get_peer_from_public_key must be called AFTER scenario_share_synchronize")
+
+        tuples = self._share_execute_memory(u"SELECT * FROM identities WHERE public_key = ? LIMIT 1", (buffer(public_key),))
+        if tuples:
+            peer_number, hostname, lan_host, lan_port, wan_host, wan_port, public_key, private_key = tuples[0]
+            return self._share_identity_cls(peer_number, hostname, (str(lan_host), lan_port), (str(wan_host), wan_port), str(public_key), str(private_key))
+        else:
+            #print "get_peer_from_candidate", candidate.lan_address, tuples
+            #for tup for self._share_execute_memory(u"SELECT * FROM identities"):
+            #    print tup
+            assert False, "could not find public key"
+            raise RuntimeError("could not find public key")
+
     def get_peer_from_candidate(self, candidate):
         # dependencies
         if not (0 < self._scenario_calls["scenario_start"]):
@@ -722,7 +743,7 @@ CREATE TABLE IF NOT EXISTS ready (peer_number INTEGER PRIMARY KEY)
         tuples = self._share_execute_memory(u"SELECT * FROM identities WHERE lan_host = ? AND lan_port = ? LIMIT 1", candidate.lan_address)
         if tuples:
             peer_number, hostname, lan_host, lan_port, wan_host, wan_port, public_key, private_key = tuples[0]
-            return self._share_identity_cls(peer_number, hostname, (lan_host, lan_port), (wan_host, wan_port), str(public_key), str(private_key))
+            return self._share_identity_cls(peer_number, hostname, (str(lan_host), lan_port), (str(wan_host), wan_port), str(public_key), str(private_key))
         else:
             #print "get_peer_from_candidate", candidate.lan_address, tuples
             #for tup for self._share_execute_memory(u"SELECT * FROM identities"):
@@ -740,7 +761,7 @@ CREATE TABLE IF NOT EXISTS ready (peer_number INTEGER PRIMARY KEY)
         tuples = self._share_execute_memory(u"SELECT * FROM identities WHERE peer_number = ? LIMIT 1", (peer_number,))
         if tuples:
             peer_number, hostname, lan_host, lan_port, wan_host, wan_port, public_key, private_key = tuples[0]
-            return self._share_identity_cls(peer_number, hostname, (lan_host, lan_port), (wan_host, wan_port), str(public_key), str(private_key))
+            return self._share_identity_cls(peer_number, hostname, (str(lan_host), lan_port), (str(wan_host), wan_port), str(public_key), str(private_key))
         else:
             assert False, "could not find candidate"
             raise RuntimeError("could not find candidate")

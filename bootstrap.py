@@ -47,7 +47,7 @@ def get_bootstrap_hosts(working_directory):
         return _trackers
 
 
-def get_bootstrap_candidates(dispersy, timeout=1.0):
+def get_bootstrap_candidates(dispersy, timeout=10.0):
     """
     Returns a list with all known bootstrap peers.
 
