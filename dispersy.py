@@ -2455,29 +2455,41 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
             return
 
         def get_sub_select(meta):
-            direction = meta.distribution.synchronization_direction
-            if direction == u"ASC":
-                return u"""
- SELECT * FROM
-  (SELECT sync.packet FROM sync    -- """ + meta.name + """
-   WHERE sync.meta_message = ? AND sync.undone = 0 AND sync.global_time BETWEEN ? AND ? AND (sync.global_time + ?) % ? = 0
-   ORDER BY sync.global_time ASC)"""
+            assert isinstance(meta.distribution, SyncDistribution), type(meta)
+            order_by = {u"ASC":"sync.global_time ASC", u"DESC":"sync.global_time DESC", u"RANDOM":"RANDOM()"}
 
-            if direction == u"DESC":
-                return u"""
- SELECT * FROM
-  (SELECT sync.packet FROM sync    -- """ + meta.name + """
-   WHERE sync.meta_message = ? AND sync.undone = 0 AND sync.global_time BETWEEN ? AND ? AND (sync.global_time + ?) % ? = 0
-   ORDER BY sync.global_time DESC)"""
+            if meta.distribution.members:
+                if isinstance(meta.authentication, DoubleMemberAuthentication):
+                    return u"""
+     SELECT * FROM
+      (SELECT sync.packet FROM sync    -- """ + meta.name + """
+       JOIN double_signed_sync ON double_signed_sync.sync = sync.id
+       WHERE sync.meta_message = ? AND
+             sync.undone = 0 AND
+             sync.global_time BETWEEN ? AND ? AND (sync.global_time + ?) % ? = 0 AND
+             (double_signed_sync.member1 IN (""" + ", ".join(str(member.database_id) for member in meta.distribution.members) + """) OR
+              double_signed_sync.member2 IN (""" + ", ".join(str(member.database_id) for member in meta.distribution.members) + """))
+       ORDER BY """ + order_by[meta.distribution.synchronization_direction] + """)"""
 
-            if direction == u"RANDOM":
-                return u"""
- SELECT * FROM
-  (SELECT sync.packet FROM sync    -- """ + meta.name + """
-   WHERE sync.meta_message = ? AND sync.undone = 0 AND sync.global_time BETWEEN ? AND ? AND (sync.global_time + ?) % ? = 0
-   ORDER BY RANDOM())"""
+                else:
+                    return u"""
+     SELECT * FROM
+      (SELECT sync.packet FROM sync    -- """ + meta.name + """
+       WHERE sync.meta_message = ? AND
+             sync.undone = 0 AND
+             sync.global_time BETWEEN ? AND ? AND (sync.global_time + ?) % ? = 0 AND
+             sync.member IN (""" + ", ".join(str(member.database_id) for member in meta.distribution.members) + """)
+       ORDER BY """ + order_by[meta.distribution.synchronization_direction] + """)"""
 
-            raise RuntimeError("Unknown synchronization_direction [%d]" % direction)
+            else:
+                return u"""
+     SELECT * FROM
+      (SELECT sync.packet FROM sync    -- """ + meta.name + """
+       WHERE sync.meta_message = ? AND sync.undone = 0 AND sync.global_time BETWEEN ? AND ? AND (sync.global_time + ?) % ? = 0
+       ORDER BY """ + order_by[meta.distribution.synchronization_direction] + """)"""
+
+            raise RuntimeError("Unable to obtain sub-select statement for %s" % meta)
+
 
         # obtain all available messages for this community
         meta_messages = sorted([meta
@@ -2785,14 +2797,14 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
          be True, its inclusion is mostly to allow certain debugging scenarios.
         @type store: bool
         """
-        assert isinstance(messages, list)
-        assert len(messages) > 0
-        assert all(isinstance(message, Message.Implementation) for message in messages)
+        assert isinstance(messages, list), type(messages)
+        assert len(messages) > 0, len(messages)
+        assert all(isinstance(message, Message.Implementation) for message in messages), [type(message) for message in messages]
         assert all(message.community == messages[0].community for message in messages)
         assert all(message.meta == messages[0].meta for message in messages)
-        assert isinstance(store, bool)
-        assert isinstance(update, bool)
-        assert isinstance(forward, bool)
+        assert isinstance(store, bool), type(store)
+        assert isinstance(update, bool), type(update)
+        assert isinstance(forward, bool), type(forward)
 
         logger.debug("%d %s messages (%s %s %s)", len(messages), messages[0].name, store, update, forward)
 

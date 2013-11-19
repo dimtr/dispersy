@@ -76,6 +76,8 @@ class DebugCommunity(Community):
                 Message(self, u"low-priority-text", MemberAuthentication(), PublicResolution(), FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=100), CommunityDestination(node_count=10), TextPayload(), self.check_text, self.on_text),
                 Message(self, u"medium-priority-text", MemberAuthentication(), PublicResolution(), FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=150), CommunityDestination(node_count=10), TextPayload(), self.check_text, self.on_text),
                 Message(self, u"RANDOM-text", MemberAuthentication(), PublicResolution(), FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"RANDOM", priority=128), CommunityDestination(node_count=10), TextPayload(), self.check_text, self.on_text),
+                Message(self, u"member-full-sync-text", MemberAuthentication(), PublicResolution(), FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128), CommunityDestination(node_count=10), TextPayload(), self.check_text, self.on_text),
+                Message(self, u"double-member-full-sync-text", DoubleMemberAuthentication(allow_signature_func=self.allow_double_signed_text), PublicResolution(), FullSyncDistribution(enable_sequence_number=False, synchronization_direction=u"ASC", priority=128), CommunityDestination(node_count=10), TextPayload(), self.check_text, self.on_text),
                 ]
 
     def create_full_sync_text(self, text, store=True, update=True, forward=True):
@@ -152,6 +154,17 @@ class DebugCommunity(Community):
         meta = self.get_meta_message(u"sequence-text")
         message = meta.impl(authentication=(self._my_member,),
                             distribution=(self.claim_global_time(), meta.distribution.claim_sequence_number()),
+                            payload=(text,))
+        self._dispersy.store_update_forward([message], store, update, forward)
+        return message
+
+    #
+    # member-full-sync-text and double-member-full-sync-text
+    #
+    def create_member_full_sync_text(self, text, store=True, update=True, forward=True):
+        meta = self.get_meta_message(u"member-full-sync-text")
+        message = meta.impl(authentication=(self._my_member,),
+                            distribution=(self.claim_global_time(),),
                             payload=(text,))
         self._dispersy.store_update_forward([message], store, update, forward)
         return message
