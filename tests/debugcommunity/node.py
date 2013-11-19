@@ -412,6 +412,7 @@ class DebugNode(object):
                 packets_.append(self.receive_packet(timeout, addresses, packets))
             except socket.error:
                 break
+        logger.debug("Received %d packets", len(packets))
         return packets_
 
     def receive_message(self, timeout=None, addresses=None, packets=None, message_names=None, payload_types=None, distributions=None, destinations=None, names=None):
@@ -501,6 +502,7 @@ class DebugNode(object):
 
         if counts and not len(messages) in counts:
             raise AssertionError("Received %d messages while expecting %s messages" % (len(messages), counts))
+        logger.debug("Received %d messages", len(messages))
         return messages
 
     def create_dispersy_authorize(self, permission_triplets, sequence_number, global_time):
@@ -788,3 +790,15 @@ class DebugNode(object):
         Returns a new RANDOM-text message.
         """
         return self._create_text(u"RANDOM-text", text, global_time)
+
+    def create_member_full_sync_text(self, text, global_time):
+        """
+        Returns a new member-full-sync-text message.
+        """
+        return self._create_text(u"member-full-sync-text", text, global_time)
+
+    def create_double_member_full_sync_text(self, text, other, global_time, sign):
+        """
+        Returns a new double-member-full-sync-text message.
+        """
+        return self._create_doublemember_text(u"double-member-full-sync-text", other, text, global_time, sign)

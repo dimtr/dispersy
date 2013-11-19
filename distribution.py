@@ -1,17 +1,15 @@
 """
-Each Privilege can be distributed, usualy through the transfer of a message, in different ways.
-These ways are defined by DistributionMeta object that is associated to the Privilege.
+The Distribution policy that is assigned to a Meta Message determines *how* the message is
+disseminate (if at all) between peers.  The following Distribution policies are currently defined:
 
-The DistributionMeta associated to the Privilege is used to create a Distribution object that is
-assigned to the Message.
+- FullSyncDistribution: gossiped to every other peer in the overlay.
 
-Example: A community has a permission called 'user-name'.  This Permission has the
-LastSyncDistributionMeta object assigned to it.  The LastSyncDistributionMeta object dictates some
-values such as the size and stepping used for the BloomFilter.
+- LastSyncDistribution: the last N messages created by a each member are gossiped to every peer in
+  the overlay.
 
-Whenever a the 'user-name' Permission is used, a LastSyncDistribution object is created.  The
-LastSyncDistribution object holds additional information for this specific message, such as the
-global_time.
+- DirectDistribution: messages are not gossiped.
+
+- RelayDistribution: not implemented.
 """
 
 from abc import ABCMeta, abstractmethod
@@ -152,6 +150,11 @@ class SyncDistribution(Distribution):
     The PRIORITY was introduced when we found that the dispersy-identity messages are the majority
     of gossiped messages while very few are actually required.  The dispersy-missing-identity
     message is used to retrieve an identity whenever it is needed.
+
+    The MEMBERS was introduced to allow a community to limit data dissemination.  When MEMBERS is an
+    empty set all messages are synced, however, when MEMBERS contains one or more Member instances,
+    only messages created by those members will be synced.  For example: adding only your own Member
+    instance will disseminate only 0-hop messages.
     """
 
     class Implementation(Distribution.Implementation):
@@ -184,21 +187,25 @@ class SyncDistribution(Distribution):
         def pruning(self):
             return self._pruning
 
+        @property
+        def members(self):
+            return self._meta.members
+
     def __init__(self, synchronization_direction, priority, pruning=NoPruning()):
         # note: messages with a high priority value are synced before those with a low priority
         # value.
         # note: the priority has precedence over the global_time based ordering.
         # note: the default priority should be 127, use higher or lowe values when needed.
-        assert isinstance(synchronization_direction, unicode)
-        assert synchronization_direction in (u"ASC", u"DESC", u"RANDOM")
-        assert isinstance(priority, int)
-        assert 0 <= priority <= 255
+        assert isinstance(synchronization_direction, unicode), type(synchronization_direction)
+        assert synchronization_direction in (u"ASC", u"DESC", u"RANDOM"), synchronization_direction
+        assert isinstance(priority, int), type(priority)
+        assert 0 <= priority <= 255, priority
         assert isinstance(pruning, Pruning), type(pruning)
         self._synchronization_direction = synchronization_direction
         self._priority = priority
         self._current_sequence_number = 0
         self._pruning = pruning
-#        self._database_id = 0
+        self._members = set()
 
     @property
     def community(self):
@@ -220,9 +227,12 @@ class SyncDistribution(Distribution):
     def pruning(self):
         return self._pruning
 
-    # @property
-    # def database_id(self):
-    #     return self._database_id
+    @property
+    def members(self):
+        if __debug__:
+            from .member import Member
+            assert all(isinstance(member, Member) for member in self._members), [type(member) for member in self._members]
+        return self._members
 
     def setup(self, message):
         """
@@ -293,7 +303,6 @@ class FullSyncDistribution(SyncDistribution):
             # obtain the most recent sequence number that we have used
             self._current_sequence_number, = message.community.dispersy.database.execute(u"SELECT COUNT(1) FROM sync WHERE member = ? AND meta_message = ?",
                                                                                          (message.community.my_member.database_id, message.database_id)).next()
-
     def claim_sequence_number(self):
         assert self._enable_sequence_number
         self._current_sequence_number += 1
@@ -305,16 +314,12 @@ class LastSyncDistribution(SyncDistribution):
     class Implementation(SyncDistribution.Implementation):
 
         @property
-        def cluster(self):
-            return self._meta._cluster
-
-        @property
         def history_size(self):
             return self._meta._history_size
 
     def __init__(self, synchronization_direction, priority, history_size, pruning=NoPruning()):
-        assert isinstance(history_size, int)
-        assert history_size > 0
+        assert isinstance(history_size, int), type(history_size)
+        assert history_size > 0, history_size
         super(LastSyncDistribution, self).__init__(synchronization_direction, priority, pruning)
         self._history_size = history_size
 
