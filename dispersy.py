@@ -2336,9 +2336,9 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
         if forward:
             if sync:
                 time_low, time_high, modulo, offset, _ = sync
-                logger.warning("%s %s sending introduction request to %s [%d:%d] %%%d+%d", community.cid.encode("HEX"), type(community), destination, time_low, time_high, modulo, offset)
+                logger.debug("%s %s sending introduction request to %s [%d:%d] %%%d+%d", community.cid.encode("HEX"), type(community), destination, time_low, time_high, modulo, offset)
             else:
-                logger.warning("%s %s sending introduction request to %s", community.cid.encode("HEX"), type(community), destination)
+                logger.debug("%s %s sending introduction request to %s", community.cid.encode("HEX"), type(community), destination)
 
             self._statistics.walk_attempt += 1
             if isinstance(destination, BootstrapCandidate):
