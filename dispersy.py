@@ -1485,6 +1485,8 @@ class Dispersy(object):
                             pass
                         else:
                             self._statistics.dict_inc(self._statistics.outgoing, u"-sequence-")
+                            logger.warning("sending newer message in response to receiving an older message [%s %d@%d]",
+                                           message.name, message.authentication.member.database_id, message.distribution.global_time)
                             self._endpoint.send([message.candidate], [str(packet)])
 
                     return DropMessage(message, "old message by member^global_time")
