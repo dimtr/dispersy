@@ -1485,8 +1485,6 @@ class Dispersy(object):
                             pass
                         else:
                             self._statistics.dict_inc(self._statistics.outgoing, u"-sequence-")
-                            logger.warning("sending newer message in response to receiving an older message [%s %d@%d]",
-                                           message.name, message.authentication.member.database_id, message.distribution.global_time)
                             self._endpoint.send([message.candidate], [str(packet)])
 
                     return DropMessage(message, "old message by member^global_time")
@@ -1582,6 +1580,8 @@ WHERE sync.meta_message = ? AND double_signed_sync.member1 = ? AND double_signed
                         # apparently the sender does not have this message yet
                         if message.distribution.history_size == 1:
                             packet_id, have_packet = tim.values()[0]
+                            logger.warning("sending newer message in response to receiving an older message [%s %d@%d]",
+                                           message.name, message.authentication.member.database_id, message.distribution.global_time)
                             self._statistics.dict_inc(self._statistics.outgoing, u"-sequence-")
                             self._endpoint.send([message.candidate], [have_packet])
 
