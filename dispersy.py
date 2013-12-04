@@ -1580,14 +1580,11 @@ WHERE sync.meta_message = ? AND double_signed_sync.member1 = ? AND double_signed
                         # apparently the sender does not have this message yet
                         if message.distribution.history_size == 1:
                             packet_id, have_packet = tim.values()[0]
+                            # TODO change logger.warning back into logger.debug
                             logger.warning("sending newer message in response to receiving an older message [%s %d@%d]",
                                            message.name, message.authentication.member.database_id, message.distribution.global_time)
                             self._statistics.dict_inc(self._statistics.outgoing, u"-sequence-")
-
-                            # temporarily disable this feature to confirm that this is the only
-                            # reason we are getting 'identical message' warnings
-
-                            # self._endpoint.send([message.candidate], [have_packet])
+                            self._endpoint.send([message.candidate], [have_packet])
 
                         logger.debug("drop %s %s@%d (older than %s)", message.name, members, message.distribution.global_time, min(tim))
                         return DropMessage(message, "old message by members^global_time")
