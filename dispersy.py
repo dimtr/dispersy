@@ -1583,14 +1583,16 @@ WHERE sync.meta_message = ? AND double_signed_sync.member1 = ? AND double_signed
                     elif len(tim) >= message.distribution.history_size and min(tim) > message.distribution.global_time:
                         # we have newer messages (drop)
 
-                        # if the history_size is one, we can sent that on message back because
-                        # apparently the sender does not have this message yet
-                        if message.distribution.history_size == 1:
-                            packet_id, have_packet = tim.values()[0]
-                            logger.debug("sending newer message in response to receiving an older message [%s %d@%d]",
-                                         message.name, message.authentication.member.database_id, message.distribution.global_time)
-                            self._statistics.dict_inc(self._statistics.outgoing, u"-sequence-")
-                            self._endpoint.send([message.candidate], [have_packet])
+                        # 05/12/13 Dimitra: disabled this optimisation to simplify the data
+                        # dissemination (easier to explain in the paper)
+                        # # if the history_size is one, we can sent that on message back because
+                        # # apparently the sender does not have this message yet
+                        # if message.distribution.history_size == 1:
+                        #     packet_id, have_packet = tim.values()[0]
+                        #     logger.debug("sending newer message in response to receiving an older message [%s %d@%d]",
+                        #                  message.name, message.authentication.member.database_id, message.distribution.global_time)
+                        #     self._statistics.dict_inc(self._statistics.outgoing, u"-sequence-")
+                        #     self._endpoint.send([message.candidate], [have_packet])
 
                         logger.debug("drop %s %s@%d (older than %s)", message.name, members, message.distribution.global_time, min(tim))
                         return DropMessage(message, "old message by members^global_time")
