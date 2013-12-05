@@ -94,15 +94,21 @@ class SignatureRequestCache(NumberCache):
         assert isinstance(number, (int, long)), type(number)
         return u"request-cache:signature-request:%d" % (number,)
 
-    def __init__(self, request_cache, members, response_func, response_args, timeout):
+    def __init__(self, request_cache, candidates, members, response_func, response_args, success_func, success_args, timeout):
         super(SignatureRequestCache, self).__init__(request_cache)
         self.request = None
+        # CANDIDATES is a list containing all the candidates that should add their signature.
+        # currently we only support double signed messages, hence CANDIDATES contains only a single
+        # Candidate instance.
+        self.candidates = candidates
         # MEMBERS is a list containing all the members that should add their signature.  currently
         # we only support double signed messages, hence MEMBERS contains only a single Member
         # instance.
         self.members = members
         self.response_func = response_func
         self.response_args = response_args
+        self.success_func = success_func
+        self.success_args = success_args
         self._timeout_delay = timeout
 
     @property
@@ -115,7 +121,8 @@ class SignatureRequestCache(NumberCache):
 
     def on_timeout(self):
         logger.debug("signature timeout")
-        self.response_func(self, None, True, *self.response_args)
+        result = self.response_func(self, None, False, *self.response_args)
+        assert isinstance(result, bool), "RESPONSE_FUNC must return a boolean value!"
 
 
 class IntroductionRequestCache(NumberCache):
@@ -3235,7 +3242,8 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
                     assert not message.payload.mid == message.community.my_member.mid, "we should always have our own dispersy-identity"
                     logger.warning("could not find any missing members.  no response is sent [%s, mid:%s, cid:%s]", mid.encode("HEX"), message.community.my_member.mid.encode("HEX"), message.community.cid.encode("HEX"))
 
-    def create_signature_request(self, community, candidate, message, response_func, response_args=(), timeout=10.0, forward=True):
+    def create_signature_request(self, community, candidate, message, response_func, response_args=(),
+                                 success_func=None, success_args=(), timeout=10.0, forward=True):
         """
         Create a dispersy-signature-request message.
 
@@ -3250,14 +3258,21 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
         Receiving the dispersy-signed-response message results in a call to RESPONSE_FUNC.  The
         first parameter for this call is the SignatureRequestCache instance returned by
         create_signature_request, the second parameter is the proposed message that was sent back,
-        the third parameter is a boolean indicating weather MESSAGE was modified.
+        the third parameter is a boolean indicating whether MESSAGE was modified.  Any values in
+        RESPONSE_ARGS are appended to this call.
 
-        RESPONSE_FUNC must return a boolean value indicating weather the proposed message (the
+        RESPONSE_FUNC must return a boolean value indicating whether the proposed message (the
         second parameter) is accepted.  Once we accept all signature responses we will add our own
         signature and the last proposed message is stored, updated, and forwarded.
 
-        If not all members sent a reply withing timeout seconds, one final call to response_func is
-        made with the second parameter set to None.
+        Finally, when we add our own signature the SUCCESS_FUNC is called.  The first parameter for
+        this call is the SignatureRequestCache instance returned by create_signature_request and the
+        second parameter is the fully signed message.  Any values in SUCCESS_ARGS are appended to
+        this call.
+
+        If not all members sent a reply withing timeout seconds, one final call to RESPONSE_FUNC is
+        made with the second parameter set to None, and the third parameter set to False.  Any
+        values in RESPONSE_ARGS are appended to this call.
 
         @param community: The community for wich the dispersy-signature-request message will be
          created.
@@ -3274,6 +3289,12 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
 
         @param response_args: Optional arguments added when calling response_func.
         @type response_args: tuple
+
+        @param success_func: The method that is called once a message is signed by all parties.
+        @type success_func: None or a callable method
+
+        @param success_args: Optional arguments added when calling success_func.
+        @type success_args: tuple
 
         @param timeout: How long before a timeout is generated.
         @type timeout: float
@@ -3295,12 +3316,21 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
         assert isinstance(forward, bool)
 
         # the members that need to sign
-        members = [member for signature, member in message.authentication.signed_members if not (signature or member.private_key)]
+        members = [member
+                   for signature, member
+                   in message.authentication.signed_members
+                   if not (signature or member.private_key)]
         assert len(members) == 1
 
+        # the candidate where the missing member can be found
+        candidates = [candidate]
+
         # temporary cache object
-        cache = community.request_cache.add(SignatureRequestCache(community.request_cache, members, response_func, response_args, timeout))
+        cache = community.request_cache.add(SignatureRequestCache(community.request_cache, candidates, members,
+                                                                  response_func, response_args, success_func,
+                                                                  success_args, timeout))
         logger.debug("new cache: %s", cache)
+        assert [signature for signature, _ in message.authentication.signed_members] == ["", ""]
 
         # the dispersy-signature-request message that will hold the
         # message that should obtain more signatures
@@ -3308,6 +3338,7 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
         cache.request = meta.impl(distribution=(community.global_time,),
                                   destination=(candidate,),
                                   payload=(cache.number, message))
+        assert [signature for signature, _ in message.authentication.signed_members] == ["", ""]
 
         logger.debug("asking %s", [member.mid.encode("HEX") for member in members])
         self._forward([cache.request])
@@ -3362,9 +3393,12 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
         signature.  This question is done by calling the
         sub-message.authentication.allow_signature_func method.
 
-        We will only add our signature if the allow_signature_func method returns the same, or a
-        modified sub-message.  If so, a dispersy-signature-response message is send to the creator
-        of the message, the first one in the authentication list.
+        We will only add our signature if the allow_signature_func method returns the a sub-message
+        of the same meta type.  Note that it is allowed to return a sub-message with different
+        values than the proposed, i.e. received, sub-message.  The new sub-message can be seen as a
+        counter proposal.  If allow_signature_func returns such sub-message, a
+        dispersy-signature-response message is send to the creator of the sub-message, the first one
+        in the authentication list.
 
         If we can add multiple signatures, i.e. we have the private keys for both the message
         creator and the second member, the allow_signature_func is called only once but multiple
@@ -3386,6 +3420,13 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
             submsg = message.payload.message.authentication.allow_signature_func(message.payload.message)
             assert submsg is None or isinstance(submsg, Message.Implementation), type(submsg)
             if submsg:
+                assert submsg.name == message.payload.message.name, "we may only propose a message of the same meta type"
+
+                # add signatures where needed
+                if any(not signature and member.private_key for signature, member in submsg.authentication.signed_members):
+                    logger.debug("regenerate message to add our signature(s)")
+                    submsg.regenerate_packet()
+
                 responses.append(meta.impl(distribution=(message.community.global_time,),
                                            destination=(message.candidate,),
                                            payload=(message.payload.identifier, submsg)))
@@ -3458,6 +3499,9 @@ WHERE sync.community = ? AND meta_message.priority > 32 AND sync.undone = 0 AND 
 
                 assert new_submsg.authentication.is_signed
                 self.store_update_forward([new_submsg], True, True, True)
+
+                if callable(cache.success_func):
+                    cache.success_func(cache, new_submsg, *cache.success_args)
 
     def create_missing_sequence(self, community, candidate, member, message, missing_low, missing_high, response_func=None, response_args=(), timeout=10.0):
         # ensure that the identifier is 'triggered' somewhere, i.e. using

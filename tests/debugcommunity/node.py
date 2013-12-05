@@ -412,7 +412,7 @@ class DebugNode(object):
                 packets_.append(self.receive_packet(timeout, addresses, packets))
             except socket.error:
                 break
-        logger.debug("Received %d packets", len(packets))
+        logger.debug("Received %d packets", len(packets_))
         return packets_
 
     def receive_message(self, timeout=None, addresses=None, packets=None, message_names=None, payload_types=None, distributions=None, destinations=None, names=None):

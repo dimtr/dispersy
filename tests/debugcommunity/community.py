@@ -100,13 +100,16 @@ class DebugCommunity(Community):
     # double-signed-text
     #
 
-    def create_double_signed_text(self, text, candidate, member, response_func, response_args=(), timeout=10.0, forward=True):
+    def create_double_signed_text(self, text, candidate, member, response_func, response_args, success_func,
+                                  success_args, timeout, forward=True):
         assert isinstance(candidate, Candidate)
         meta = self.get_meta_message(u"double-signed-text")
         message = meta.impl(authentication=([self._my_member, member],),
                             distribution=(self.global_time,),
-                            payload=(text,))
-        return self.create_dispersy_signature_request(candidate, message, response_func, response_args, timeout, forward)
+                            payload=(text,),
+                            sign=False)
+        return self.create_dispersy_signature_request(candidate, message, response_func, response_args, success_func,
+                                                      success_args, timeout, forward)
 
     def allow_double_signed_text(self, message):
         """

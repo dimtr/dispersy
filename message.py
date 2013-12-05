@@ -442,11 +442,11 @@ class Message(MetaObject):
         def load_message(self):
             return self
 
-        def regenerate_packet(self, packet=""):
+        def regenerate_packet(self, packet="", sign=True):
             if packet:
                 self._packet = packet
             else:
-                self._packet = self._conversion.encode_message(self)
+                self._packet = self._conversion.encode_message(self, sign=sign)
 
         def __str__(self):
             return "<%s.%s %s %dbytes>" % (self._meta.__class__.__name__, self.__class__.__name__, self._meta._name, len(self._packet))
