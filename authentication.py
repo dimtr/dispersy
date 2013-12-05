@@ -295,7 +295,7 @@ class DoubleMemberAuthentication(Authentication):
         def is_signed(self):
             return all(self._signatures)
 
-        def set_signature(self, member, signature):
+        def set_signature(self, member, signature, sign=True):
             """
             Set a verified signature for a specific member.
 
@@ -307,12 +307,18 @@ class DoubleMemberAuthentication(Authentication):
 
             @param signature: The signature for this message.
             @type signature: string
+
+            @param sign: Whether signatures should be created when we have the private key
+             available.
+            @type sign: bool
             """
             # todo: verify the signature
             assert member in self._members
             assert member.signature_length == len(signature)
+            assert isinstance(signature, str), type(signature)
+            assert isinstance(sign, bool), type(sign)
             self._signatures[self._members.index(member)] = signature
-            self._regenerate_packet_func()
+            self._regenerate_packet_func(sign=sign)
 
         def setup(self, message_impl):
             if __debug__:

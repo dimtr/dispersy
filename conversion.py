@@ -453,8 +453,13 @@ class BinaryConversion(Conversion):
         return offset, placeholder.meta.payload.Implementation(placeholder.meta.payload, identifier, message)
 
     def _encode_signature_response(self, message):
-        return (self._struct_H.pack(message.payload.identifier), self.encode_message(message.payload.message))
-        # return message.payload.identifier, message.payload.signature
+        assert isinstance(message.payload.message.packet, str), type(message.payload.message.packet)
+        assert len(message.payload.message.packet) > 0, len(message.payload.message.packet)
+        return (self._struct_H.pack(message.payload.identifier), message.payload.message.packet)
+        # 05/12/13 Boudewijn: the sub-message should already be encoded, if we encode it here it
+        # would be performed twice, and it would cause signatures to be created that we may not want
+        # (i.e. when running certain unit tests)
+        # return (self._struct_H.pack(message.payload.identifier), self.encode_message(message.payload.message))
 
     def _decode_signature_response(self, placeholder, offset, data):
         if len(data) < offset + 2:
@@ -1277,8 +1282,8 @@ class BinaryConversion(Conversion):
                 found_valid_combination = True
                 for index, member in zip(range(2), members):
                     signature = data[signature_offset:signature_offset + member.signature_length]
-                    # logging.info("INDEX: %d", index)
-                    # logging.info("%s", signature.encode('HEX'))
+                    # logger.info("INDEX: %d", index)
+                    # logger.info("%s", signature.encode('HEX'))
                     if placeholder.allow_empty_signature and signature == "\x00" * member.signature_length:
                         signatures[index] = ""
 
