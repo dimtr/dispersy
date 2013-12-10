@@ -33,7 +33,7 @@ class TestSignature(DispersyTestFunc):
             container["timeout"] += 1
             return False
 
-        community.create_double_signed_text("Accept=<does not reach this point>", node.candidate,
+        community.create_double_signed_text("Allow=<does not reach this point>, CounterPropose=<does not reach this point>", node.candidate,
                                             self._dispersy.get_member(node.my_member.public_key), on_response, (),
                                             None, (), 3.0)
         yield 0.11
@@ -92,7 +92,7 @@ class TestSignature(DispersyTestFunc):
             self.assertTrue(response.authentication.is_signed)
             container["success"] += 1
 
-        cache = community.create_double_signed_text("Accept=<does not matter>", node.candidate,
+        cache = community.create_double_signed_text("Allow=<does not matter>, CounterPropose=<does not matter>", node.candidate,
                                                     self._dispersy.get_member(node.my_member.public_key),
                                                     on_response, ("param-test-1",),
                                                     on_success, ("param-test-2",), 3.0)
@@ -132,8 +132,13 @@ class TestSignature(DispersyTestFunc):
         self.assertEqual(container["response"], 1)
         self.assertEqual(container["success"], 1 if accept_response else 0)
 
+    def test_response_from_self_counter(self):
+        return self.response_from_self(True)
+    def test_response_from_self_no_counter(self):
+        return self.response_from_self(False)
+
     @call_on_dispersy_thread
-    def test_response_from_self(self):
+    def response_from_self(self, counter_propose):
         """
         NODE will request a signature from SELF.  SELF will receive the request and respond with a
         signature response.
@@ -148,7 +153,10 @@ class TestSignature(DispersyTestFunc):
         logger.debug("NODE requests SELF to double sign")
         identifier = 12345
         global_time = 10
-        submsg = node.create_double_signed_text(community.my_member, "Allow=True", global_time, sign=False)
+        submsg = node.create_double_signed_text(community.my_member,
+                                                "Allow=True, CounterPropose=%s" % counter_propose,
+                                                global_time,
+                                                sign=False)
         node.give_message(node.create_dispersy_signature_request(identifier, submsg, global_time))
         self.assertEqual([signature for signature, _ in submsg.authentication.signed_members], ["", ""])
         yield 0.11
@@ -161,20 +169,23 @@ class TestSignature(DispersyTestFunc):
         # 1. everything up to the first signature must be the same
         second_signature_offset = len(submsg.packet) - community.my_member.signature_length
         first_signature_offset = second_signature_offset - node.my_member.signature_length
-        self.assertEqual(message.payload.message.packet[:first_signature_offset], submsg.packet[:first_signature_offset])
+        counter_second_signature_offset = len(message.payload.message.packet) - community.my_member.signature_length
+        counter_first_signature_offset = counter_second_signature_offset - node.my_member.signature_length
+        if not counter_propose:
+            self.assertEqual(message.payload.message.packet[:counter_first_signature_offset], submsg.packet[:first_signature_offset])
 
         # 2. the first signature must be zero's (this is NODE's signature and hasn't been set yet)
-        self.assertEqual(message.payload.message.packet[first_signature_offset:second_signature_offset],
+        self.assertEqual(message.payload.message.packet[counter_first_signature_offset:counter_second_signature_offset],
                          "\x00" * node.my_member.signature_length)
         self.assertEqual(message.payload.message.authentication.signed_members[0][0], "")
 
         # 3. the second signature must be set and valid
-        self.assertNotEqual(message.payload.message.packet[second_signature_offset:],
+        self.assertNotEqual(message.payload.message.packet[counter_second_signature_offset:],
                             "\x00" * community.my_member.signature_length)
         self.assertNotEqual(message.payload.message.authentication.signed_members[1][0], "")
-        self.assertTrue(community.my_member.verify(message.payload.message.packet[:first_signature_offset],
-                                                   message.payload.message.packet[second_signature_offset:]))
-        self.assertTrue(community.my_member.verify(message.payload.message.packet[:first_signature_offset],
+        self.assertTrue(community.my_member.verify(message.payload.message.packet[:counter_first_signature_offset],
+                                                   message.payload.message.packet[counter_second_signature_offset:]))
+        self.assertTrue(community.my_member.verify(message.payload.message.packet[:counter_first_signature_offset],
                                                    message.payload.message.authentication.signed_members[1][0]))
 
     @call_on_dispersy_thread
@@ -193,7 +204,7 @@ class TestSignature(DispersyTestFunc):
         logger.debug("NODE requests SELF to double sign")
         identifier = 12345
         global_time = 10
-        submsg = node.create_double_signed_text(community.my_member, "Allow=False", global_time, sign=False)
+        submsg = node.create_double_signed_text(community.my_member, "Allow=False, CounterPropose=True", global_time, sign=False)
         node.give_message(node.create_dispersy_signature_request(identifier, submsg, global_time))
         yield 0.11
 

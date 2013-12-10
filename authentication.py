@@ -295,7 +295,7 @@ class DoubleMemberAuthentication(Authentication):
         def is_signed(self):
             return all(self._signatures)
 
-        def set_signature(self, member, signature, sign=True):
+        def set_signature(self, member, signature, sign=True, regenerate=True):
             """
             Set a verified signature for a specific member.
 
@@ -318,7 +318,8 @@ class DoubleMemberAuthentication(Authentication):
             assert isinstance(signature, str), type(signature)
             assert isinstance(sign, bool), type(sign)
             self._signatures[self._members.index(member)] = signature
-            self._regenerate_packet_func(sign=sign)
+            if regenerate:
+                self._regenerate_packet_func(sign=sign)
 
         def setup(self, message_impl):
             if __debug__:

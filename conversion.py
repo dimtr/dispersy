@@ -1082,7 +1082,7 @@ class BinaryConversion(Conversion):
                 signatures.append(signature)
             elif sign and member.private_key:
                 signature = member.sign(data)
-                message.authentication.set_signature(member, signature)
+                message.authentication.set_signature(member, signature, regenerate=False)
                 signatures.append(signature)
             else:
                 signatures.append("\x00" * member.signature_length)
