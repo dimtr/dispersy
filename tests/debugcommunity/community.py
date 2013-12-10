@@ -118,9 +118,17 @@ class DebugCommunity(Community):
         Must return either: a. the same message, b. a modified version of message, or c. None.
         """
         logger.debug("%s \"%s\"", message, message.payload.text)
-        assert message.payload.text in ("Allow=True", "Allow=False")
-        if message.payload.text == "Allow=True":
-            return message
+        assert any(allow in message.payload.text for allow in ["Allow=", "Allow="]), message.payload.text
+        assert any(propose in message.payload.text for propose in ["CounterPropose=", "CounterPropose="]), message.payload.text
+        if "Allow=True" in message.payload.text:
+            if "CounterPropose=True" in message.payload.text:
+                meta = self.get_meta_message(u"double-signed-text")
+                return meta.impl(authentication=(message.authentication.members[:],),
+                                 distribution=(message.distribution.global_time,),
+                                 payload=(message.payload.text + ", This is a counter proposal",))
+
+            else:
+                return message
 
     #
     # last-1-doublemember-text

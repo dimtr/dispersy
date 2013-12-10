@@ -654,6 +654,7 @@ CREATE TABLE IF NOT EXISTS ready (peer_number INTEGER PRIMARY KEY) """
         high_peer_number = int(self._kargs["highpeernumber"])
 
         # ensure that the table exists
+        logger.info("share_synchronize has started")
         self.log("scenario-share-synchronize", state="init", peer_number=peer_number)
         self._share_execute_local(self._sql_ready)
 
@@ -715,6 +716,8 @@ CREATE TABLE IF NOT EXISTS ready (peer_number INTEGER PRIMARY KEY) """
         con_memory, _ = self._share_connect_memory()
         con_memory.executescript("".join(line for line in con_local.iterdump()))
         self.log("scenario-share-synchronize", state="done")
+
+        logger.info("share_synchronize has finished")
 
     def get_peer_from_public_key(self, public_key):
         # dependencies
