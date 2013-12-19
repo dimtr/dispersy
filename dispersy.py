@@ -2005,7 +2005,7 @@ WHERE sync.meta_message = ? AND double_signed_sync.member1 = ? AND double_signed
 
             # tell what happened
             debug_end = time()
-            if debug_end - debug_begin > 1.0:
+            if debug_end - debug_begin > 1.0 * FIVE_FACTOR:
                 logger.warning("handled %d/%d %.2fs %s messages (with %fs cache window)", len(messages), debug_count, (debug_end - debug_begin), meta.name, meta.batch.max_window)
             else:
                 logger.debug("handled %d/%d %.2fs %s messages (with %fs cache window)", len(messages), debug_count, (debug_end - debug_begin), meta.name, meta.batch.max_window)
